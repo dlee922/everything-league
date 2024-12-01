@@ -4,28 +4,44 @@ import axios from 'axios';
 function App() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [participants, setParticipants] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // Fetch data from Flask backend
+  const gameName = "Hanskyeul";
+  const tagLine = "NA1";
+
+    useEffect(() => {
+    // Fetch participants when the component loads
+    setLoading(true);
     axios
-      .get('/api/data') // Proxy sends this to Flask backend
+      .get(`/api/participants/${gameName}/${tagLine}`)
       .then((response) => {
-        setMessage(response.data.message);
-        setError('');
+        setParticipants(response.data.participants);
+        setError("");
       })
       .catch((err) => {
         console.error(err);
-        setError('Failed to fetch data from backend.');
+        setError(err.response?.data?.error || "An error occurred");
+      })
+      .finally(() => {
+        setLoading(false);
       });
   }, []);
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h1>React + Flask Integration</h1>
-      {error ? (
-        <p style={{ color: 'red' }}>{error}</p>
+    <div style={{ padding: "20px" }}>
+      <h1>Match Participants</h1>
+
+      {loading ? (
+        <p>Loading...</p>
+      ) : error ? (
+        <p style={{ color: "red" }}>{error}</p>
       ) : (
-        <p>{message || 'Loading...'}</p>
+        <ul>
+          {participants.map((participant, index) => (
+            <li key={index}>{participant}</li>
+          ))}
+        </ul>
       )}
     </div>
   );

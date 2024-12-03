@@ -178,7 +178,7 @@ def add_players(game_name, tag_line):
 
         # Get all participants
         players = parser.get_all_players()
-        print(f"Participants fetched: {participants}")
+        print(f"Players fetched: {players}")
 
         # Reference the MongoDB collection
         mongo_collection = client["everything-league"]["summoners"]

@@ -38,7 +38,7 @@ class MatchDataParser:
     except KeyError:
       raise ValueError("Game duration not found in match data.")
     
-  def get_all_participants(self):
+  def get_all_players(self):
     """
     Returns a list of all participants who participated in the match
     """

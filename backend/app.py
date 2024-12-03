@@ -2,17 +2,46 @@ from flask import Flask, jsonify
 import requests
 import json
 import os
+from bson.json_util import dumps
 from match_parser import MatchDataParser
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+from dotenv import load_dotenv
 
-app = Flask(__name__)
+# global variables
+global player_collection
 
-# Your Riot API key
-API_KEY = 'RGAPI-c7b400ed-c4e8-4339-9cd2-940024de1c89'
+# local variables:
 
-# Base URLs for Riot API
+# riot api key
+API_KEY = 'RGAPI-cab2fec5-ab41-4a13-b681-8b15c26a1328'
+
+# base urls for riot api
 ACCOUNT_BASE_URL = "https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id"
 MATCH_BASE_URL = "https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid"
 MATCH_DETAIL_URL = "https://americas.api.riotgames.com/lol/match/v5/matches"
+
+# load environment variables from .env file
+load_dotenv()
+
+# create flask app
+app = Flask(__name__)
+
+# retrieve mongo uri from .env file
+uri = os.getenv("MONGO_URI")
+if not uri:
+    raise ValueError("MONGO_URI is not set in .env file")
+
+# connect to MongoDB
+client = MongoClient(uri, server_api=ServerApi('1'))
+
+# check connection
+try: 
+    client.admin.command('ping')
+    print("Pinging your deployment: You successfully connected to MongoDB!")
+except Exception as e:
+    print(f"Failed to connect to MongoDB: {e}")
+
 
 
 @app.route('/api/last-game/<game_name>/<tag_line>', methods=['GET'])
@@ -96,33 +125,113 @@ def parse_match(game_name, tag_line):
         })
     except (FileNotFoundError, ValueError) as e:
         return jsonify({"error": str(e)}), 500
-    
-# Route to get all participants from a specific match JSON file
-@app.route('/api/participants/<game_name>/<tag_line>', methods=['GET'])
-def get_all_participants(game_name, tag_line):
+
+# Route to get all players from the mongo DB
+@app.route('/api/players', methods=['GET'])
+def get_all_players():
     """
-    API endpoint to get all participants in a match.
+    API endpoint to get all participants played with from MongoDB
     Args:
         game_name (str): Summoner's game name.
         tag_line (str): Summoner's tag line.
     Returns:
         JSON response with a list of participants or an error message.
     """
-    file_path = f"last_game_{game_name}_{tag_line}.json"  # Path to the match JSON file
-
     try:
+        mongo_collection = client["everything-league"]["summoners"]
+
+        player_cursor = mongo_collection.find({}, {"_id": 0, "summonerName": 1})
+
+
+        player_list = [player["summonerName"] for player in player_cursor]
+        print(f'Player List: {player_list}')
+        return jsonify({"players": player_list}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    
+
+@app.route('/api/add-players/<game_name>/<tag_line>', methods=['POST'])
+def add_players(game_name, tag_line):
+    """
+    API endpoint to add participants to MongoDB.
+    Expects a JSON payload containing the participants.
+
+    Request Body:
+    {
+        "participants": ["Player1", "Player2", ...]
+    }
+
+    Returns:
+        JSON response with a list of added participants or an error message.
+    """
+    file_path = f"last_game_{game_name}_{tag_line}.json"  # Path to the match JSON file
+    try:
+        if not os.path.exists(file_path):
+            return jsonify({"error": f"File not found: {file_path}"}), 404
+        
+        print(f"Received request to add participants for game_name={game_name}, tag_line={tag_line}")
+        print(f"File path: {file_path}")
+
         # Initialize the parser
         parser = MatchDataParser(file_path)
 
         # Get all participants
-        participants = parser.get_all_participants()
+        players = parser.get_all_players()
+        print(f"Participants fetched: {participants}")
 
-        return jsonify({"participants": participants})
+        # Reference the MongoDB collection
+        mongo_collection = client["everything-league"]["summoners"]
 
-    except (FileNotFoundError, ValueError) as e:
+        # Add each participant to the database
+        added_players = []
+        for player in players:
+            # Insert participant into MongoDB if not already present
+            result = mongo_collection.update_one(
+                {"summonerName": player},
+                {"$setOnInsert": {"summonerName": player, "stats": {}}},  # Placeholder stats
+                upsert=True
+            )
+            if result.upserted_id:  # Only add if it was newly inserted
+                added_players.append(player)
+
+        print(f"Added players: {added_players}")
+        return jsonify({
+            "message": "Participants added to the database",
+            "addedPlayers": added_players
+        }), 201
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/delete-player/<player_name>', methods=['DELETE'])
+def delete_player(player_name: str):
+    """
+    API endpoint to delete a player from the collection
 
+    request_body:
+    {
+        "player_name": str
+    }
+
+    returns:
+    JSON response letting the user know if the player was deleted if an error occurred
+    """
+    try:
+        # reference the mongo collection
+        mongo_collection = client["everything-league"]["summoners"]
+
+        player_to_delete = mongo_collection.find_one_and_delete({"summonerName": player_name})
+
+        if player_to_delete:
+            return jsonify({
+                "message": "Summoner deleted successfully",
+                "summoner": dumps(player_to_delete)
+            }), 200
+        else:
+            return jsonify({"error": f"Summoner {player_name} not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 

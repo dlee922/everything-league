@@ -1,4 +1,4 @@
-from match_parser import MatchDataParser
+from parsers.match_parser import MatchDataParser
 
 file_path = "last_game_Hanskyeul_NA1.json"
 

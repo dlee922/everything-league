@@ -1,5 +1,5 @@
 # Routes for managing player data
-from flask import Blueprint, jsonify, request
+from flask import Blueprint
 from app.services.player_service import get_all_players, add_players, delete_player
 
 player_bp = Blueprint('player', __name__)

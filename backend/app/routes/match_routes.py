@@ -1,5 +1,5 @@
 # Routes for fetching and parsing match data
-from flask import Blueprint, jsonify, request
+from flask import Blueprint
 from app.services.match_service import fetch_last_game, parse_match_data
 
 match_bp = Blueprint('match', __name__)
